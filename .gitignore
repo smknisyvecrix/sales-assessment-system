@@ -1,0 +1,10 @@
+node_modules
+dist
+.npm-cache
+dev-server*.log
+dev-server.pid
+tsconfig.tsbuildinfo
+verification-*.png
+.env
+.env.*
+*.local
