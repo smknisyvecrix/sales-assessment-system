@@ -29,7 +29,7 @@ export default function ResultPage({ navigate }: ResultPageProps) {
           <div>
             <p className="tag">提交时间：{new Date(result.submittedAt).toLocaleString()}</p>
             <h2 className="mt-3 text-2xl font-bold">{result.participant.name} 的测评报告</h2>
-            <p className="mt-1 text-sm text-muted">{result.participant.department}</p>
+            <p className="mt-1 text-sm text-muted">{result.participant.department} · {result.examTitle ?? '销售能力综合笔试 V3版'}</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-md border border-line bg-paper p-4 text-center">

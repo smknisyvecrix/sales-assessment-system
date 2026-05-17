@@ -1,10 +1,12 @@
 import type { AssessmentResult, Participant, UserAnswer } from './scoring';
+import type { ExamSet } from './examSets';
 
 const SESSION_KEY = 'sales-assessment-session-v3';
 const RESULT_KEY = 'sales-assessment-latest-result-v3';
 
 export interface ExamSession {
   participant: Participant;
+  exam: ExamSet;
   startedAt: string;
   expiresAt: number;
   answers: UserAnswer[];

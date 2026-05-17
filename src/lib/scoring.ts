@@ -1,4 +1,5 @@
-import { dimensions, examQuestions, type Dimension, type ExamQuestion, type OpenQuestion, type PathQuestion } from '../data/examData';
+import { dimensions, examQuestions, examMeta, type ExamQuestion, type OpenQuestion, type PathQuestion } from '../data/examData';
+import { getExamDimensions, type ExamSet } from './examSets';
 
 export interface Participant {
   name: string;
@@ -33,13 +34,15 @@ export interface ScoreBucket {
 
 export interface AssessmentResult {
   id: string;
+  examId: string;
+  examTitle: string;
   submittedAt: string;
   participant: Participant;
   totalScore: number;
   maxScore: number;
   grade: 'A' | 'B+' | 'B' | 'C' | 'D';
   moduleScores: Record<string, ScoreBucket>;
-  dimensionScores: Record<Dimension, ScoreBucket>;
+  dimensionScores: Record<string, ScoreBucket>;
   abilityProfile: string[];
   mainProblems: string[];
   questionScores: QuestionScore[];
@@ -59,11 +62,11 @@ const sameSelection = (actual: string[] = [], expected: string[] = []) => {
   return actualSet.size === expectedSet.size && [...expectedSet].every((item) => actualSet.has(item));
 };
 
-export const getGrade = (score: number): AssessmentResult['grade'] => {
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B+';
-  if (score >= 70) return 'B';
-  if (score >= 60) return 'C';
+export const getGrade = (scorePercent: number): AssessmentResult['grade'] => {
+  if (scorePercent >= 90) return 'A';
+  if (scorePercent >= 80) return 'B+';
+  if (scorePercent >= 70) return 'B';
+  if (scorePercent >= 60) return 'C';
   return 'D';
 };
 
@@ -126,27 +129,42 @@ const scoreQuestion = (question: ExamQuestion, answer?: UserAnswer) => {
   return scoreOpenQuestion(question, answer);
 };
 
-const emptyDimensionScores = () =>
-  dimensions.reduce(
+const emptyDimensionScores = (examDimensions: string[]) =>
+  examDimensions.reduce(
     (acc, dimension) => ({
       ...acc,
       [dimension]: { score: 0, maxScore: 0, percent: 0 },
     }),
-    {} as Record<Dimension, ScoreBucket>,
+    {} as Record<string, ScoreBucket>,
   );
 
 const toPercent = (score: number, maxScore: number) => (maxScore > 0 ? Math.round((score / maxScore) * 100) : 0);
 
-export const calculateScore = (participant: Participant, answers: UserAnswer[]): AssessmentResult => {
+const defaultScoringExam: ExamSet = {
+  id: 'sales-v3',
+  title: examMeta.title,
+  description: '',
+  durationMinutes: examMeta.durationMinutes,
+  totalScore: examMeta.totalScore,
+  questions: examQuestions,
+  isActive: true,
+};
+
+export const calculateScore = (
+  participant: Participant,
+  answers: UserAnswer[],
+  exam: ExamSet = defaultScoringExam,
+): AssessmentResult => {
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
-  const questionScores = examQuestions.map((question) => scoreQuestion(question, answerMap.get(question.id)));
+  const questionScores = exam.questions.map((question) => scoreQuestion(question, answerMap.get(question.id)));
   const totalScore = questionScores.reduce((sum, item) => sum + item.score, 0);
-  const maxScore = examQuestions.reduce((sum, question) => sum + question.maxScore, 0);
+  const maxScore = exam.questions.reduce((sum, question) => sum + question.maxScore, 0);
 
   const moduleScores: Record<string, ScoreBucket> = {};
-  const dimensionScores = emptyDimensionScores();
+  const examDimensions = getExamDimensions(exam.questions);
+  const dimensionScores = emptyDimensionScores(examDimensions.length ? examDimensions : [...dimensions]);
 
-  examQuestions.forEach((question) => {
+  exam.questions.forEach((question) => {
     const scored = questionScores.find((item) => item.questionId === question.id);
     if (!scored) return;
 
@@ -168,16 +186,19 @@ export const calculateScore = (participant: Participant, answers: UserAnswer[]):
     bucket.percent = toPercent(bucket.score, bucket.maxScore);
   });
 
-  const sortedDimensions = [...dimensions].sort((a, b) => dimensionScores[b].percent - dimensionScores[a].percent);
+  const sortedDimensions = Object.keys(dimensionScores).sort((a, b) => dimensionScores[b].percent - dimensionScores[a].percent);
   const weakDimensions = sortedDimensions.filter((dimension) => dimensionScores[dimension].percent < 70);
+  const scorePercent = toPercent(totalScore, maxScore);
 
   return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    examId: exam.id,
+    examTitle: exam.title,
     submittedAt: new Date().toISOString(),
     participant,
     totalScore,
     maxScore,
-    grade: getGrade(totalScore),
+    grade: getGrade(scorePercent),
     moduleScores,
     dimensionScores,
     abilityProfile: sortedDimensions.map(

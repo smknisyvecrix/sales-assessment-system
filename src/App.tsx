@@ -35,7 +35,6 @@ export default function App() {
           </div>
           <nav className="flex flex-wrap gap-2">
             <button className="btn-secondary" onClick={() => navigate('/')}>员工入口</button>
-            <button className="btn-secondary" onClick={() => navigate('/admin')}>管理端导入</button>
           </nav>
         </div>
       </header>

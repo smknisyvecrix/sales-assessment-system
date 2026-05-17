@@ -3,6 +3,7 @@ import { calculateDimensionAverage, calculateLevelDistribution, exportResultsToC
 import { downloadText } from '../lib/export';
 import type { AssessmentResult } from '../lib/scoring';
 import { fetchCloudResults, supabase } from '../lib/supabase';
+import { defaultExamSet, fetchExamSets, normalizeUploadedExam, uploadExamSet, type ExamSet } from '../lib/examSets';
 
 const mergeResults = (current: AssessmentResult[], incoming: AssessmentResult[]) => {
   const map = new Map<string, AssessmentResult>();
@@ -14,8 +15,33 @@ const mergeResults = (current: AssessmentResult[], incoming: AssessmentResult[])
   );
 };
 
+const getExamKey = (result: AssessmentResult) => result.examId || 'sales-v3';
+
+const summarizeExamResults = (results: AssessmentResult[]) => {
+  const grouped = new Map<string, AssessmentResult[]>();
+  results.forEach((result) => {
+    const key = getExamKey(result);
+    grouped.set(key, [...(grouped.get(key) ?? []), result]);
+  });
+
+  return [...grouped.entries()].map(([examId, examResults]) => {
+    const dimensionAverage = calculateDimensionAverage(examResults);
+    const levelDistribution = calculateLevelDistribution(examResults);
+    return {
+      examId,
+      examTitle: examResults[0]?.examTitle ?? '销售能力综合笔试 V3版',
+      count: examResults.length,
+      averageScore: Math.round(examResults.reduce((sum, result) => sum + result.totalScore, 0) / examResults.length),
+      weakestDimension: dimensionAverage[0]?.dimension ?? '暂无数据',
+      levelDistribution,
+    };
+  });
+};
+
 export default function AdminImportPage() {
   const [results, setResults] = useState<AssessmentResult[]>([]);
+  const [examSets, setExamSets] = useState<ExamSet[]>([defaultExamSet]);
+  const [selectedExamId, setSelectedExamId] = useState('all');
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,9 +49,22 @@ export default function AdminImportPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState('未登录。登录后可读取云端全部员工提交结果。');
 
-  const dimensionAverage = useMemo(() => calculateDimensionAverage(results), [results]);
-  const levelDistribution = useMemo(() => calculateLevelDistribution(results), [results]);
+  const filteredResults = useMemo(
+    () => selectedExamId === 'all' ? results : results.filter((result) => getExamKey(result) === selectedExamId),
+    [results, selectedExamId],
+  );
+  const dimensionAverage = useMemo(() => calculateDimensionAverage(filteredResults), [filteredResults]);
+  const levelDistribution = useMemo(() => calculateLevelDistribution(filteredResults), [filteredResults]);
   const weakestDimension = dimensionAverage[0];
+  const examSummaries = useMemo(() => summarizeExamResults(results), [results]);
+  const averageScore = filteredResults.length
+    ? Math.round(filteredResults.reduce((sum, item) => sum + item.totalScore, 0) / filteredResults.length)
+    : 0;
+
+  const loadExamSets = async () => {
+    const exams = await fetchExamSets();
+    setExamSets(exams);
+  };
 
   const loadCloudResults = async () => {
     setIsLoading(true);
@@ -42,6 +81,7 @@ export default function AdminImportPage() {
   };
 
   useEffect(() => {
+    loadExamSets();
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setIsAuthed(true);
@@ -50,6 +90,35 @@ export default function AdminImportPage() {
       }
     });
   }, []);
+
+  const uploadExamFile = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const text = await files[0].text();
+      const exam = normalizeUploadedExam(JSON.parse(text));
+      await uploadExamSet(exam);
+      await loadExamSets();
+      setStatus(`已上传考试题：${exam.title}`);
+    } catch {
+      setError('上传考试题失败：请确认 JSON 格式正确，并且当前管理员账号有上传权限。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const downloadExamTemplate = () => {
+    const template = {
+      ...defaultExamSet,
+      id: 'new-sales-exam',
+      title: '新销售能力测评',
+      description: '这里填写考试说明。',
+      isActive: true,
+    };
+    downloadText('考试题模板.json', JSON.stringify(template, null, 2), 'application/json');
+  };
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -96,7 +165,7 @@ export default function AdminImportPage() {
   };
 
   const exportCsv = () => {
-    downloadText('销售测评成绩汇总.csv', `\uFEFF${exportResultsToCsv(results)}`, 'text/csv');
+    downloadText('销售测评成绩汇总.csv', `\uFEFF${exportResultsToCsv(filteredResults)}`, 'text/csv');
   };
 
   return (
@@ -121,9 +190,22 @@ export default function AdminImportPage() {
               导入 JSON
               <input className="hidden" type="file" accept="application/json,.json" multiple onChange={(event) => importFiles(event.target.files)} />
             </label>
-            <button className="btn-secondary" disabled={!results.length} onClick={exportCsv}>导出 Excel CSV</button>
+            <button className="btn-secondary" disabled={!filteredResults.length} onClick={exportCsv}>导出 Excel CSV</button>
             <button className="btn-secondary" disabled={!results.length} onClick={() => setResults([])}>清空</button>
           </div>
+        </div>
+        <div className="mt-5 max-w-md">
+          <label className="block text-sm font-medium text-ink">
+            统计范围
+            <select className="field mt-1" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
+              <option value="all">全部考试总体统计</option>
+              {examSummaries.map((summary) => (
+                <option key={summary.examId} value={summary.examId}>
+                  {summary.examTitle}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         {error && <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       </section>
@@ -156,16 +238,41 @@ export default function AdminImportPage() {
         </section>
       )}
 
+      {isAuthed && (
+        <section className="panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="text-lg font-bold">考试题管理</h3>
+              <p className="mt-2 text-sm text-muted">
+                上传 JSON 后，员工入口会出现这套考试题。题目结构需包含 title、durationMinutes、totalScore 和 questions。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-secondary" onClick={downloadExamTemplate}>下载试卷模板</button>
+              <label className="btn-primary cursor-pointer">
+                上传考试题 JSON
+                <input className="hidden" type="file" accept="application/json,.json" onChange={(event) => uploadExamFile(event.target.files)} />
+              </label>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {examSets.map((exam) => (
+              <span key={exam.id} className="tag">
+                {exam.title} · {exam.questions.length}题 · {exam.totalScore}分
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="panel">
           <div className="text-sm text-muted">统计人数</div>
-          <div className="mt-1 text-3xl font-bold text-focus">{results.length}</div>
+          <div className="mt-1 text-3xl font-bold text-focus">{filteredResults.length}</div>
         </div>
         <div className="panel">
           <div className="text-sm text-muted">平均分</div>
-          <div className="mt-1 text-3xl font-bold text-focus">
-            {results.length ? Math.round(results.reduce((sum, item) => sum + item.totalScore, 0) / results.length) : 0}
-          </div>
+          <div className="mt-1 text-3xl font-bold text-focus">{averageScore}</div>
         </div>
         <div className="panel">
           <div className="text-sm text-muted">最弱能力维度</div>
@@ -179,6 +286,39 @@ export default function AdminImportPage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="panel overflow-x-auto">
+        <h3 className="text-lg font-bold">各考试总体统计</h3>
+        <table className="mt-4 w-full min-w-[760px] border-collapse text-sm">
+          <thead>
+            <tr className="bg-paper text-left">
+              <th className="border border-line p-2">考试</th>
+              <th className="border border-line p-2">人数</th>
+              <th className="border border-line p-2">平均分</th>
+              <th className="border border-line p-2">最弱能力维度</th>
+              <th className="border border-line p-2">等级分布</th>
+            </tr>
+          </thead>
+          <tbody>
+            {examSummaries.map((summary) => (
+              <tr key={summary.examId}>
+                <td className="border border-line p-2">{summary.examTitle}</td>
+                <td className="border border-line p-2">{summary.count}</td>
+                <td className="border border-line p-2">{summary.averageScore}</td>
+                <td className="border border-line p-2">{summary.weakestDimension}</td>
+                <td className="border border-line p-2">
+                  {['A', 'B+', 'B', 'C', 'D'].map((grade) => `${grade}:${summary.levelDistribution[grade] ?? 0}`).join(' / ')}
+                </td>
+              </tr>
+            ))}
+            {!examSummaries.length && (
+              <tr>
+                <td className="border border-line p-3 text-center text-muted" colSpan={5}>暂无云端或导入成绩</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
@@ -195,7 +335,7 @@ export default function AdminImportPage() {
                   <div className="h-2 rounded-full bg-focus" style={{ width: `${item.average}%` }} />
                 </div>
               </div>
-            )) : <p className="text-sm text-muted">导入 JSON 后显示统计。</p>}
+            )) : <p className="text-sm text-muted">读取云端或导入 JSON 后显示统计。</p>}
           </div>
         </div>
 
@@ -204,6 +344,7 @@ export default function AdminImportPage() {
           <table className="mt-4 w-full min-w-[560px] border-collapse text-sm">
             <thead>
               <tr className="bg-paper text-left">
+                <th className="border border-line p-2">考试</th>
                 <th className="border border-line p-2">姓名</th>
                 <th className="border border-line p-2">部门</th>
                 <th className="border border-line p-2">总分</th>
@@ -212,8 +353,9 @@ export default function AdminImportPage() {
               </tr>
             </thead>
             <tbody>
-              {results.map((result) => (
+              {filteredResults.map((result) => (
                 <tr key={result.id}>
+                  <td className="border border-line p-2">{result.examTitle ?? '销售能力综合笔试 V3版'}</td>
                   <td className="border border-line p-2">{result.participant.name}</td>
                   <td className="border border-line p-2">{result.participant.department}</td>
                   <td className="border border-line p-2">{result.totalScore}</td>
@@ -223,7 +365,7 @@ export default function AdminImportPage() {
               ))}
               {!results.length && (
                 <tr>
-                  <td className="border border-line p-3 text-center text-muted" colSpan={5}>暂无导入数据</td>
+                  <td className="border border-line p-3 text-center text-muted" colSpan={6}>暂无成绩数据</td>
                 </tr>
               )}
             </tbody>

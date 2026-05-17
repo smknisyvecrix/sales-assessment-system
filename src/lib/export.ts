@@ -47,6 +47,7 @@ export const resultToMarkdown = (result: AssessmentResult) => {
 
 - 姓名：${result.participant.name}
 - 部门：${result.participant.department}
+- 考试：${result.examTitle ?? '销售能力综合笔试 V3版'}
 - 提交时间：${new Date(result.submittedAt).toLocaleString()}
 - 总分：${result.totalScore}/${result.maxScore}
 - 等级：${result.grade}
@@ -113,6 +114,7 @@ export const resultToHtml = (result: AssessmentResult) => {
   <div class="summary">
     <div class="box"><strong>姓名</strong><br />${escapeHtml(result.participant.name)}</div>
     <div class="box"><strong>部门</strong><br />${escapeHtml(result.participant.department)}</div>
+    <div class="box"><strong>考试</strong><br />${escapeHtml(result.examTitle ?? '销售能力综合笔试 V3版')}</div>
     <div class="box"><strong>总分</strong><br />${result.totalScore}/${result.maxScore}</div>
     <div class="box"><strong>等级</strong><br />${result.grade}</div>
   </div>
@@ -132,7 +134,7 @@ export const resultToHtml = (result: AssessmentResult) => {
 };
 
 export const downloadResult = (result: AssessmentResult, format: 'json' | 'markdown' | 'html') => {
-  const baseName = `${safeFilename(result.participant.department)}-${safeFilename(result.participant.name)}-销售测评`;
+  const baseName = `${safeFilename(result.examTitle ?? '销售测评')}-${safeFilename(result.participant.department)}-${safeFilename(result.participant.name)}`;
   if (format === 'json') {
     downloadText(`${baseName}.json`, resultToJson(result), 'application/json');
   }

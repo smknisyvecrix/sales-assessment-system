@@ -17,15 +17,16 @@ export const parseAssessmentFiles = async (files: File[]) => {
 };
 
 export const exportResultsToCsv = (results: AssessmentResult[]) => {
-  const dimensionNames = results[0] ? Object.keys(results[0].dimensionScores) : [];
-  const headers = ['姓名', '部门', '提交时间', '总分', '等级', ...dimensionNames];
+  const dimensionNames = Array.from(new Set(results.flatMap((result) => Object.keys(result.dimensionScores))));
+  const headers = ['考试', '姓名', '部门', '提交时间', '总分', '等级', ...dimensionNames];
   const rows = results.map((result) => [
+    result.examTitle ?? '销售能力综合笔试 V3版',
     result.participant.name,
     result.participant.department,
     new Date(result.submittedAt).toLocaleString(),
     result.totalScore,
     result.grade,
-    ...dimensionNames.map((dimension) => `${result.dimensionScores[dimension as keyof typeof result.dimensionScores].percent}%`),
+    ...dimensionNames.map((dimension) => result.dimensionScores[dimension] ? `${result.dimensionScores[dimension].percent}%` : ''),
   ]);
 
   return [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
@@ -42,13 +43,14 @@ export const calculateLevelDistribution = (results: AssessmentResult[]) =>
 
 export const calculateDimensionAverage = (results: AssessmentResult[]) => {
   if (!results.length) return [] as Array<{ dimension: string; average: number }>;
-  const dimensionNames = Object.keys(results[0].dimensionScores);
+  const dimensionNames = Array.from(new Set(results.flatMap((result) => Object.keys(result.dimensionScores))));
 
   return dimensionNames
     .map((dimension) => {
+      const matchingResults = results.filter((result) => result.dimensionScores[dimension]);
       const average = Math.round(
-        results.reduce((sum, result) => sum + result.dimensionScores[dimension as keyof typeof result.dimensionScores].percent, 0) /
-          results.length,
+        matchingResults.reduce((sum, result) => sum + result.dimensionScores[dimension].percent, 0) /
+          matchingResults.length,
       );
       return { dimension, average };
     })

@@ -32,17 +32,21 @@ export const buildTrainingPlan = (result: AssessmentResult) => {
   const weakDimensions = Object.entries(result.dimensionScores)
     .sort(([, left], [, right]) => left.percent - right.percent)
     .filter(([, bucket]) => bucket.percent < 75)
-    .map(([dimension]) => dimension as Dimension)
+    .map(([dimension]) => dimension)
     .slice(0, 3);
 
   const selected = weakDimensions.length
     ? weakDimensions
-    : (Object.entries(result.dimensionScores)
+    : Object.entries(result.dimensionScores)
         .sort(([, left], [, right]) => left.percent - right.percent)
         .slice(0, 2)
-        .map(([dimension]) => dimension) as Dimension[]);
+        .map(([dimension]) => dimension);
 
-  return selected.flatMap((dimension) =>
-    adviceMap[dimension].map((advice) => `${dimension}：${advice}`),
-  );
+  return selected.flatMap((dimension) => {
+    const advice = adviceMap[dimension as Dimension] ?? [
+      '整理该能力维度的标准动作、常见错误和优秀答案样例，每周用真实客户案例复盘一次。',
+      '围绕该维度建立 3 个固定检查问题，接待后逐项确认是否做到。',
+    ];
+    return advice.map((item) => `${dimension}：${item}`);
+  });
 };

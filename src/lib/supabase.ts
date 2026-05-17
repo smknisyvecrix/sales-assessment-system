@@ -46,6 +46,8 @@ export const fetchCloudResults = async () => {
   return (data as AssessmentResultRow[]).map((row) => ({
     ...row.result,
     id: row.result.id || row.id,
+    examId: row.result.examId || 'sales-v3',
+    examTitle: row.result.examTitle || '销售能力综合笔试 V3版',
     submittedAt: row.result.submittedAt || row.submitted_at,
     participant: {
       name: row.result.participant?.name || row.participant_name,
@@ -53,6 +55,6 @@ export const fetchCloudResults = async () => {
     },
     totalScore: row.result.totalScore ?? row.total_score,
     maxScore: row.result.maxScore ?? row.max_score,
-    grade: row.result.grade ?? row.grade,
+    grade: row.result.grade ?? (row.grade as AssessmentResult['grade']),
   }));
 };
