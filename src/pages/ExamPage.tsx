@@ -3,6 +3,7 @@ import type { Navigate } from '../App';
 import { examQuestions, examSections } from '../data/examData';
 import { calculateScore, type UserAnswer } from '../lib/scoring';
 import { clearExamSession, loadExamSession, saveExamSession, saveLatestResult, type ExamSession } from '../lib/storage';
+import { saveResultToCloud } from '../lib/supabase';
 
 interface ExamPageProps {
   navigate: Navigate;
@@ -32,11 +33,16 @@ export default function ExamPage({ navigate }: ExamPageProps) {
     return () => window.clearInterval(timer);
   }, [navigate, session]);
 
-  const submitExam = useCallback(() => {
+  const submitExam = useCallback(async () => {
     const latest = loadExamSession();
     if (!latest) return;
     const result = calculateScore(latest.participant, latest.answers);
     saveLatestResult(result);
+    try {
+      await saveResultToCloud(result);
+    } catch (error) {
+      console.error('Failed to save result to Supabase', error);
+    }
     clearExamSession();
     navigate('/result');
   }, [navigate]);
