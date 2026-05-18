@@ -11,14 +11,26 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey);
 const stringifyUnknownError = async (error: unknown) => {
   if (!error) return '未知错误';
 
-  const maybeContext = error as { context?: Response };
-  if (maybeContext.context) {
-    const detail = await maybeContext.context.text().catch(() => '');
-    const message = error instanceof Error ? error.message : String(error);
-    return detail ? `${message}：${detail}` : message;
+  const message = error instanceof Error ? error.message : String(error);
+  const context = (error as { context?: unknown }).context;
+  if (context) {
+    if (context instanceof Response) {
+      const detail = await context.text().catch(() => '');
+      return detail ? `${message}：${detail}` : message;
+    }
+
+    if (typeof context === 'object') {
+      try {
+        return `${message}：${JSON.stringify(context)}`;
+      } catch {
+        return message;
+      }
+    }
+
+    return `${message}：${String(context)}`;
   }
 
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) return message;
   if (typeof error === 'string') return error;
 
   try {
