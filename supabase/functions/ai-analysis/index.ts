@@ -29,6 +29,72 @@ const extractJson = (content: string) => {
   return JSON.parse(cleaned.slice(start, end + 1));
 };
 
+const getAiMessageContent = (aiData: Record<string, unknown>) => {
+  const choice = (aiData.choices as Array<Record<string, unknown>> | undefined)?.[0];
+  const message = choice?.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'text' in item) {
+          return String((item as { text: unknown }).text);
+        }
+        return '';
+      })
+      .join('\n');
+  }
+
+  return '';
+};
+
+const normalizeParsedAiResult = (parsed: Record<string, unknown>) => {
+  if (parsed.analysis) return parsed;
+
+  if (
+    parsed.summary ||
+    parsed.strengths ||
+    parsed.weaknesses ||
+    parsed.trainingPlan ||
+    parsed.rescoring
+  ) {
+    return {
+      analysis: parsed,
+      targetedExam: parsed.targetedExam ?? parsed.targeted_exam ?? null,
+    };
+  }
+
+  return parsed;
+};
+
+const callAiApi = async (
+  apiUrl: string,
+  apiKey: string,
+  model: string,
+  prompt: string,
+  useJsonMode: boolean,
+) => fetch(apiUrl, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model,
+    messages: [
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+    temperature: 0.2,
+    max_tokens: 6000,
+    ...(useJsonMode ? { response_format: { type: 'json_object' } } : {}),
+  }),
+});
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -55,6 +121,7 @@ Deno.serve(async (req) => {
 
   const { data: isAdmin, error: adminError } = await supabase.rpc('is_admin');
   if (adminError || !isAdmin) {
+    console.error('AI analysis admin check failed', adminError);
     return jsonResponse({ error: 'Only admins can run AI analysis' }, 403);
   }
 
@@ -87,43 +154,46 @@ ${JSON.stringify(result)}
 ${JSON.stringify(localAnalysis ?? null)}
 `;
 
-  const aiResponse = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      temperature: 0.2,
-    }),
-  });
+  let aiResponse = await callAiApi(apiUrl, apiKey, model, prompt, true);
+  let retriedWithoutJsonMode = false;
+
+  if (!aiResponse.ok && [400, 404, 422].includes(aiResponse.status)) {
+    const firstError = await aiResponse.text();
+    console.error('AI API request with JSON mode failed, retrying without JSON mode', firstError);
+    retriedWithoutJsonMode = true;
+    aiResponse = await callAiApi(apiUrl, apiKey, model, prompt, false);
+  }
 
   if (!aiResponse.ok) {
     const text = await aiResponse.text();
-    return jsonResponse({ error: 'AI API request failed', detail: text }, 502);
+    console.error('AI API request failed', text);
+    return jsonResponse({ error: 'AI API request failed', detail: text, retriedWithoutJsonMode }, 502);
   }
 
   const aiData = await aiResponse.json();
-  const content = aiData?.choices?.[0]?.message?.content;
+  const content = getAiMessageContent(aiData);
   if (!content) {
-    return jsonResponse({ error: 'AI API returned empty content' }, 502);
+    console.error('AI API returned empty content', JSON.stringify(aiData).slice(0, 2000));
+    return jsonResponse({ error: 'AI API returned empty content', retriedWithoutJsonMode }, 502);
   }
 
   try {
-    const parsed = extractJson(content);
+    const parsed = normalizeParsedAiResult(extractJson(content));
+    if (!parsed.analysis) {
+      return jsonResponse({
+        error: 'AI JSON missing analysis field',
+        raw: content.slice(0, 3000),
+        retriedWithoutJsonMode,
+      }, 502);
+    }
     return jsonResponse(parsed);
   } catch (error) {
+    console.error('Failed to parse AI JSON', error, content.slice(0, 3000));
     return jsonResponse({
       error: 'Failed to parse AI JSON',
       detail: error instanceof Error ? error.message : String(error),
-      raw: content,
+      raw: content.slice(0, 3000),
+      retriedWithoutJsonMode,
     }, 502);
   }
 });

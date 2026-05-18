@@ -14,6 +14,8 @@ import { defaultExamSet, fetchExamSets, normalizeUploadedExam, uploadExamSet, ty
 import { buildEmployeeAnalysis, buildTargetedExamForResult } from '../lib/employeeAnalysis';
 import { stringifyAiValue, toAiTextList, toAiTrainingPlan } from '../lib/aiDisplay';
 
+const getErrorText = (error: unknown) => error instanceof Error ? error.message : String(error);
+
 const mergeResults = (current: AssessmentResult[], incoming: AssessmentResult[]) => {
   const map = new Map<string, AssessmentResult>();
   [...current, ...incoming].forEach((result) => {
@@ -209,8 +211,9 @@ export default function AdminImportPage() {
     try {
       await runAiAnalysisForResult(selectedResult);
       setStatus(`已生成 AI 分析：${selectedResult.participant.name}`);
-    } catch {
-      setError('AI 分析失败：请确认 Edge Function 已部署，UNITRUST_API_KEY 已配置，并且当前账号是管理员。');
+    } catch (analysisError) {
+      console.error(analysisError);
+      setError(`AI 分析失败：${getErrorText(analysisError)}`);
     } finally {
       setIsAiRunning(false);
     }
@@ -232,8 +235,9 @@ export default function AdminImportPage() {
         await runAiAnalysisForResult(result);
       }
       setStatus(`已补齐 ${pending.length} 个员工的 AI 分析。`);
-    } catch {
-      setError('批量 AI 分析中断：请稍后重试，已完成的分析会保留。');
+    } catch (analysisError) {
+      console.error(analysisError);
+      setError(`批量 AI 分析中断：${getErrorText(analysisError)}。已完成的分析会保留。`);
     } finally {
       setIsAiRunning(false);
     }

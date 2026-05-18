@@ -8,6 +8,26 @@ const supabasePublishableKey = 'sb_publishable_YO6Kk7994LxE1zd25b9Q-w_6Ib56MOI';
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey);
 
+const stringifyUnknownError = async (error: unknown) => {
+  if (!error) return '未知错误';
+
+  const maybeContext = error as { context?: Response };
+  if (maybeContext.context) {
+    const detail = await maybeContext.context.text().catch(() => '');
+    const message = error instanceof Error ? error.message : String(error);
+    return detail ? `${message}：${detail}` : message;
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
 interface AssessmentResultRow {
   id: string;
   participant_name: string;
@@ -165,7 +185,11 @@ export const invokeAiAnalysis = async (result: AssessmentResult, localAnalysis: 
   });
 
   if (error) {
-    throw error;
+    throw new Error(`Edge Function 调用失败：${await stringifyUnknownError(error)}`);
+  }
+
+  if (!data?.analysis) {
+    throw new Error(`AI 分析返回格式不完整：${JSON.stringify(data).slice(0, 800)}`);
   }
 
   return data as {
@@ -196,6 +220,6 @@ export const saveAiAnalysisRecord = async (
   });
 
   if (error) {
-    throw error;
+    throw new Error(`保存 AI 分析失败：${error.message}`);
   }
 };
