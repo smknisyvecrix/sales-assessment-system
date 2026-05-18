@@ -67,6 +67,13 @@ export default function AdminImportPage() {
     () => selectedResult ? buildEmployeeAnalysis(selectedResult) : null,
     [selectedResult],
   );
+  const employeeAnalyses = useMemo(
+    () => filteredResults.map((result) => ({
+      result,
+      analysis: buildEmployeeAnalysis(result),
+    })),
+    [filteredResults],
+  );
   const averageScore = filteredResults.length
     ? Math.round(filteredResults.reduce((sum, item) => sum + item.totalScore, 0) / filteredResults.length)
     : 0;
@@ -358,6 +365,49 @@ export default function AdminImportPage() {
             {!examSummaries.length && (
               <tr>
                 <td className="border border-line p-3 text-center text-muted" colSpan={5}>暂无云端或导入成绩</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="panel overflow-x-auto">
+        <h3 className="text-lg font-bold">全员个人分析概览</h3>
+        <table className="mt-4 w-full min-w-[920px] border-collapse text-sm">
+          <thead>
+            <tr className="bg-paper text-left">
+              <th className="border border-line p-2">员工</th>
+              <th className="border border-line p-2">考试</th>
+              <th className="border border-line p-2">总分/等级</th>
+              <th className="border border-line p-2">待补强能力</th>
+              <th className="border border-line p-2">训练重点</th>
+              <th className="border border-line p-2">低分题</th>
+              <th className="border border-line p-2">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employeeAnalyses.map(({ result, analysis }) => (
+              <tr key={result.id}>
+                <td className="border border-line p-2">{result.participant.department} · {result.participant.name}</td>
+                <td className="border border-line p-2">{result.examTitle ?? '销售能力综合笔试 V3版'}</td>
+                <td className="border border-line p-2">{result.totalScore}/{result.maxScore} · {result.grade}</td>
+                <td className="border border-line p-2">
+                  {analysis.weakDimensions.length
+                    ? analysis.weakDimensions.map((item) => `${item.dimension}${item.percent}%`).join('、')
+                    : '暂无明显短板'}
+                </td>
+                <td className="border border-line p-2">
+                  {analysis.trainingPlan.slice(0, 2).join('；')}
+                </td>
+                <td className="border border-line p-2">{analysis.lowScoreQuestions.length}</td>
+                <td className="border border-line p-2">
+                  <button className="btn-secondary px-3 py-1" onClick={() => setSelectedResultId(result.id)}>查看详情</button>
+                </td>
+              </tr>
+            ))}
+            {!employeeAnalyses.length && (
+              <tr>
+                <td className="border border-line p-3 text-center text-muted" colSpan={7}>暂无员工分析数据</td>
               </tr>
             )}
           </tbody>
