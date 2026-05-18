@@ -90,10 +90,55 @@ const callAiApi = async (
       },
     ],
     temperature: 0.2,
-    max_tokens: 6000,
+    max_tokens: 2800,
     ...(useJsonMode ? { response_format: { type: 'json_object' } } : {}),
   }),
 });
+
+const buildCompactPayload = (result: Record<string, any>, localAnalysis: Record<string, any> | null) => {
+  const answersByQuestion = new Map(
+    (result.answers ?? []).map((answer: Record<string, any>) => [answer.questionId, answer]),
+  );
+
+  return {
+    participant: result.participant,
+    examId: result.examId,
+    examTitle: result.examTitle,
+    submittedAt: result.submittedAt,
+    totalScore: result.totalScore,
+    maxScore: result.maxScore,
+    grade: result.grade,
+    moduleScores: result.moduleScores,
+    dimensionScores: result.dimensionScores,
+    mainProblems: result.mainProblems,
+    localAnalysis: {
+      weakDimensions: localAnalysis?.weakDimensions ?? [],
+      strengths: localAnalysis?.strengths ?? [],
+      keyFindings: localAnalysis?.keyFindings ?? [],
+      trainingPlan: localAnalysis?.trainingPlan ?? [],
+      lowScoreQuestions: localAnalysis?.lowScoreQuestions ?? [],
+    },
+    questionScores: (result.questionScores ?? []).map((question: Record<string, any>) => {
+      const answer = answersByQuestion.get(question.questionId) as Record<string, any> | undefined;
+      return {
+        questionId: question.questionId,
+        title: question.title,
+        module: question.module,
+        maxScore: question.maxScore,
+        originalScore: question.score,
+        needsManualReview: question.needsManualReview,
+        matchedPoints: question.matchedPoints,
+        missingPoints: question.missingPoints,
+        feedback: question.feedback,
+        answer: {
+          selected: answer?.selected ?? [],
+          reason: answer?.reason ?? '',
+          text: answer?.text ?? '',
+        },
+      };
+    }),
+  };
+};
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -130,28 +175,27 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Invalid assessment result payload' }, 400);
   }
 
-  const prompt = `你是销售培训负责人和销售笔试阅卷官。请基于下面的测评结果、员工原始答案、标准答案、关键词命中、缺失点，对员工进行深度分析，并进行 AI 重新评分。
+  const compactPayload = buildCompactPayload(result, localAnalysis ?? null);
+
+  const prompt = `你是销售培训负责人和销售笔试阅卷官。请基于下面的精简测评结果、员工原始答案、关键词命中、缺失点，对员工进行深度分析，并进行 AI 重新评分。
 
 要求：
 1. 只返回严格 JSON，不要 Markdown，不要解释。
 2. analysis 字段必须包含 summary、strengths、weaknesses、rootCauses、trainingPlan、managerCoachingNotes、rescoring。
-3. trainingPlan 至少 5 条，每条包含 action、practice、successCriteria。
+3. trainingPlan 生成 3-5 条，每条包含 action、practice、successCriteria。
 4. rescoring 是 AI 对员工答案重新理解后的评分，必须包含：
    - totalScore：AI 复评总分，不能超过 maxScore
    - maxScore：试卷满分
    - grade：按 90-100 A、80-89 B+、70-79 B、60-69 C、60以下 D
    - summary：AI 复评总评，说明和原始自动评分相比为何上调、下调或保持
-   - questionScores：逐题复评数组，每题包含 questionId、title、originalScore、aiScore、maxScore、reason、evidence、manualReviewSuggestion
+   - questionScores：只输出低分题和开放题的复评数组，每题包含 questionId、title、originalScore、aiScore、maxScore、reason、evidence、manualReviewSuggestion
 5. AI 评分必须严格基于员工已提交答案、题目要求、标准答案、关键词命中、缺失点，不允许凭空加分；开放题可以根据表达完整性、逻辑、场景适配度进行合理复评。
-6. targetedExam 字段必须包含 title、description、focusDimensions、questions。
-7. targetedExam.questions 生成 6-10 题，每题包含 id、type、section、module、title、prompt、dimensions、maxScore；开放题还要包含 scoringPoints；路径题还要包含 options、correctAnswers、reasonKeywords。
-8. 不要虚构员工未提交的信息，分析和复评分必须引用维度得分、低分题、员工答案和缺失点。
+6. 不要生成 targetedExam，不要生成补考试卷；系统会用本地规则单独生成补考试卷。
+7. 不要虚构员工未提交的信息，分析和复评分必须引用维度得分、低分题、员工答案和缺失点。
+8. 每个数组控制在 5 条以内，单条文字控制在 80 个中文字以内，避免输出过长。
 
-测评结果 JSON：
-${JSON.stringify(result)}
-
-本地规则分析 JSON：
-${JSON.stringify(localAnalysis ?? null)}
+精简测评结果 JSON：
+${JSON.stringify(compactPayload)}
 `;
 
   let aiResponse = await callAiApi(apiUrl, apiKey, model, prompt, true);
