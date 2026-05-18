@@ -18,6 +18,7 @@
 - 管理端支持点击员工成绩查看个人分析、训练计划和重点复盘题
 - 管理端可基于员工弱项生成针对性补考试卷，并上传为新的可选考试
 - 管理端可通过 Supabase Edge Function 调用公司 AI API，生成 AI 深度分析和 AI 针对性补考建议
+- 员工可通过“我的结果”查询自己的历史考试、系统建议和已生成的 AI分析
 - 管理端仍支持导入多个员工 JSON，统计成绩列表、能力维度均分、等级分布、最弱能力维度
 - 管理端支持导出 CSV
 - 使用 hash 路由，兼容 GitHub Pages
@@ -111,7 +112,8 @@ GitHub 会自动重新部署。
 3. 点击开始考试。
 4. 完成答题并提交。
 5. 在结果页下载 JSON、Markdown 或 HTML。
-6. 把 JSON 文件发给管理者用于汇总。
+6. 后续可点击“我的结果”，输入姓名和部门查看历史考试与 AI分析。
+7. 如云端保存失败，再把 JSON 文件发给管理者用于补充汇总。
 
 ## 管理者使用流程
 
@@ -144,8 +146,9 @@ GitHub 会自动重新部署。
 如果要启用 AI 深度分析，需要完成三件事：
 
 1. 在 Supabase SQL Editor 运行 `supabase-ai-analysis.sql`。
-2. 部署 Edge Function：`supabase/functions/ai-analysis`。
-3. 在 Supabase Edge Function Secrets 中设置：
+2. 如果希望员工能在“我的结果”里查看历史考试和 AI分析，运行 `supabase-employee-results.sql`。
+3. 部署 Edge Function：`supabase/functions/ai-analysis`。
+4. 在 Supabase Edge Function Secrets 中设置：
 
 ```text
 UNITRUST_API_KEY=你的公司AI密钥

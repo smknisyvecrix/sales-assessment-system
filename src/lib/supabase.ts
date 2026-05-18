@@ -97,6 +97,49 @@ export const fetchAiAnalysisRecords = async () => {
   return data as AiAnalysisRecord[];
 };
 
+export const fetchEmployeeResults = async (name: string, department: string) => {
+  const { data, error } = await supabase
+    .from('assessment_results')
+    .select('id, participant_name, department, total_score, max_score, grade, submitted_at, result')
+    .eq('participant_name', name.trim())
+    .eq('department', department.trim())
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as AssessmentResultRow[]).map((row) => ({
+    ...row.result,
+    id: row.result.id || row.id,
+    examId: row.result.examId || 'sales-v3',
+    examTitle: row.result.examTitle || '销售能力综合笔试 V3版',
+    submittedAt: row.result.submittedAt || row.submitted_at,
+    participant: {
+      name: row.result.participant?.name || row.participant_name,
+      department: row.result.participant?.department || row.department,
+    },
+    totalScore: row.result.totalScore ?? row.total_score,
+    maxScore: row.result.maxScore ?? row.max_score,
+    grade: row.result.grade ?? (row.grade as AssessmentResult['grade']),
+  }));
+};
+
+export const fetchEmployeeAiAnalysisRecords = async (resultIds: string[]) => {
+  if (!resultIds.length) return [] as AiAnalysisRecord[];
+
+  const { data, error } = await supabase
+    .from('ai_analysis_results')
+    .select('result_id, participant_name, department, exam_id, exam_title, analysis, targeted_exam, updated_at')
+    .in('result_id', resultIds);
+
+  if (error) {
+    throw error;
+  }
+
+  return data as AiAnalysisRecord[];
+};
+
 export const invokeAiAnalysis = async (result: AssessmentResult, localAnalysis: EmployeeAnalysis) => {
   const { data, error } = await supabase.functions.invoke('ai-analysis', {
     body: {

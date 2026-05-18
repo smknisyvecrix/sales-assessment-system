@@ -3,6 +3,7 @@ import StartPage from './pages/StartPage';
 import ExamPage from './pages/ExamPage';
 import ResultPage from './pages/ResultPage';
 import AdminImportPage from './pages/AdminImportPage';
+import EmployeeResultsPage from './pages/EmployeeResultsPage';
 
 export type Navigate = (path: string) => void;
 
@@ -35,6 +36,7 @@ export default function App() {
           </div>
           <nav className="flex flex-wrap gap-2">
             <button className="btn-secondary" onClick={() => navigate('/')}>员工入口</button>
+            <button className="btn-secondary" onClick={() => navigate('/my-results')}>我的结果</button>
           </nav>
         </div>
       </header>
@@ -43,6 +45,7 @@ export default function App() {
         {path === '/' && <StartPage navigate={navigate} />}
         {path === '/exam' && <ExamPage navigate={navigate} />}
         {path === '/result' && <ResultPage navigate={navigate} />}
+        {path === '/my-results' && <EmployeeResultsPage />}
         {path === '/admin' && <AdminImportPage />}
       </main>
     </div>
