@@ -12,6 +12,7 @@ import {
 } from '../lib/supabase';
 import { defaultExamSet, fetchExamSets, normalizeUploadedExam, uploadExamSet, type ExamSet } from '../lib/examSets';
 import { buildEmployeeAnalysis, buildTargetedExamForResult } from '../lib/employeeAnalysis';
+import { stringifyAiValue, toAiTextList, toAiTrainingPlan } from '../lib/aiDisplay';
 
 const mergeResults = (current: AssessmentResult[], incoming: AssessmentResult[]) => {
   const map = new Map<string, AssessmentResult>();
@@ -571,27 +572,27 @@ export default function AdminImportPage() {
                 <h4 className="font-semibold">AI分析 · 深度分析结果</h4>
                 <span className="tag">AI分析 · 更新时间：{selectedAiAnalysis.updated_at ? new Date(selectedAiAnalysis.updated_at).toLocaleString() : '刚刚'}</span>
               </div>
-              {selectedAiAnalysis.analysis.summary && (
-                <p className="mt-3 text-sm leading-6 text-muted">{selectedAiAnalysis.analysis.summary}</p>
+              {stringifyAiValue(selectedAiAnalysis.analysis.summary) && (
+                <p className="mt-3 text-sm leading-6 text-muted">{stringifyAiValue(selectedAiAnalysis.analysis.summary)}</p>
               )}
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div>
                   <h5 className="text-sm font-semibold">AI分析 · 识别优势</h5>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-                    {(selectedAiAnalysis.analysis.strengths ?? []).map((item) => <li key={item}>{item}</li>)}
+                    {toAiTextList(selectedAiAnalysis.analysis.strengths).map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
                 <div>
                   <h5 className="text-sm font-semibold">AI分析 · 识别短板</h5>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-                    {(selectedAiAnalysis.analysis.weaknesses ?? []).map((item) => <li key={item}>{item}</li>)}
+                    {toAiTextList(selectedAiAnalysis.analysis.weaknesses).map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
               </div>
               <div className="mt-4">
                 <h5 className="text-sm font-semibold">AI分析 · 训练计划</h5>
                 <div className="mt-2 grid gap-3 lg:grid-cols-2">
-                  {(selectedAiAnalysis.analysis.trainingPlan ?? []).map((item, index) => (
+                  {toAiTrainingPlan(selectedAiAnalysis.analysis.trainingPlan).map((item, index) => (
                     <div key={`${item.action}-${index}`} className="rounded-md border border-line bg-white p-3 text-sm">
                       <div className="font-semibold">{item.action || `训练动作 ${index + 1}`}</div>
                       <p className="mt-1 text-muted">{item.practice}</p>
@@ -604,7 +605,7 @@ export default function AdminImportPage() {
                 <div className="mt-4">
                   <h5 className="text-sm font-semibold">管理者辅导要点</h5>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-                    {(selectedAiAnalysis.analysis.managerCoachingNotes ?? []).map((item) => <li key={item}>{item}</li>)}
+                    {toAiTextList(selectedAiAnalysis.analysis.managerCoachingNotes).map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
               )}

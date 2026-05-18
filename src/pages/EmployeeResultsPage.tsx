@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { buildTrainingPlan } from '../lib/trainingPlan';
 import { fetchEmployeeAiAnalysisRecords, fetchEmployeeResults, type AiAnalysisRecord } from '../lib/supabase';
 import type { AssessmentResult } from '../lib/scoring';
+import { stringifyAiValue, toAiTextList, toAiTrainingPlan } from '../lib/aiDisplay';
 
 export default function EmployeeResultsPage() {
   const [name, setName] = useState('');
@@ -136,25 +137,25 @@ export default function EmployeeResultsPage() {
             <h3 className="text-lg font-bold">AI分析结果</h3>
             <span className="tag">AI分析 · {selectedAi.updated_at ? new Date(selectedAi.updated_at).toLocaleString() : '已生成'}</span>
           </div>
-          {selectedAi.analysis.summary && <p className="mt-3 text-sm leading-6 text-muted">{selectedAi.analysis.summary}</p>}
+          {stringifyAiValue(selectedAi.analysis.summary) && <p className="mt-3 text-sm leading-6 text-muted">{stringifyAiValue(selectedAi.analysis.summary)}</p>}
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <div>
               <h4 className="font-semibold">AI识别优势</h4>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-                {(selectedAi.analysis.strengths ?? []).map((item) => <li key={item}>{item}</li>)}
+                {toAiTextList(selectedAi.analysis.strengths).map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
             <div>
               <h4 className="font-semibold">AI识别短板</h4>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-                {(selectedAi.analysis.weaknesses ?? []).map((item) => <li key={item}>{item}</li>)}
+                {toAiTextList(selectedAi.analysis.weaknesses).map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
           </div>
           <div className="mt-5">
             <h4 className="font-semibold">AI训练计划</h4>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              {(selectedAi.analysis.trainingPlan ?? []).map((item, index) => (
+              {toAiTrainingPlan(selectedAi.analysis.trainingPlan).map((item, index) => (
                 <div key={`${item.action}-${index}`} className="rounded-md border border-line bg-paper p-3 text-sm">
                   <div className="font-semibold">{item.action || `训练动作 ${index + 1}`}</div>
                   <p className="mt-1 text-muted">{item.practice}</p>
