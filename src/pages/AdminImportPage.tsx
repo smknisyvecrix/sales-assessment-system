@@ -4,6 +4,7 @@ import { downloadText } from '../lib/export';
 import type { AssessmentResult } from '../lib/scoring';
 import { fetchCloudResults, supabase } from '../lib/supabase';
 import { defaultExamSet, fetchExamSets, normalizeUploadedExam, uploadExamSet, type ExamSet } from '../lib/examSets';
+import { buildEmployeeAnalysis, buildTargetedExamForResult } from '../lib/employeeAnalysis';
 
 const mergeResults = (current: AssessmentResult[], incoming: AssessmentResult[]) => {
   const map = new Map<string, AssessmentResult>();
@@ -42,6 +43,7 @@ export default function AdminImportPage() {
   const [results, setResults] = useState<AssessmentResult[]>([]);
   const [examSets, setExamSets] = useState<ExamSet[]>([defaultExamSet]);
   const [selectedExamId, setSelectedExamId] = useState('all');
+  const [selectedResultId, setSelectedResultId] = useState('');
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,6 +59,14 @@ export default function AdminImportPage() {
   const levelDistribution = useMemo(() => calculateLevelDistribution(filteredResults), [filteredResults]);
   const weakestDimension = dimensionAverage[0];
   const examSummaries = useMemo(() => summarizeExamResults(results), [results]);
+  const selectedResult = useMemo(
+    () => filteredResults.find((result) => result.id === selectedResultId) ?? filteredResults[0],
+    [filteredResults, selectedResultId],
+  );
+  const selectedAnalysis = useMemo(
+    () => selectedResult ? buildEmployeeAnalysis(selectedResult) : null,
+    [selectedResult],
+  );
   const averageScore = filteredResults.length
     ? Math.round(filteredResults.reduce((sum, item) => sum + item.totalScore, 0) / filteredResults.length)
     : 0;
@@ -118,6 +128,34 @@ export default function AdminImportPage() {
       isActive: true,
     };
     downloadText('考试题模板.json', JSON.stringify(template, null, 2), 'application/json');
+  };
+
+  const buildTargetedExam = () => {
+    if (!selectedResult) return null;
+    return buildTargetedExamForResult(selectedResult, examSets);
+  };
+
+  const downloadTargetedExam = () => {
+    const exam = buildTargetedExam();
+    if (!exam) return;
+    downloadText(`${exam.title}.json`, JSON.stringify(exam, null, 2), 'application/json');
+  };
+
+  const uploadTargetedExam = async () => {
+    const exam = buildTargetedExam();
+    if (!exam) return;
+    setIsLoading(true);
+    setError('');
+
+    try {
+      await uploadExamSet(exam);
+      await loadExamSets();
+      setStatus(`已生成并上传针对性补考：${exam.title}`);
+    } catch {
+      setError('上传针对性补考失败：请确认 exam_sets 表和管理员权限已配置。');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const signIn = async () => {
@@ -207,6 +245,11 @@ export default function AdminImportPage() {
             </select>
           </label>
         </div>
+        {selectedResult && (
+          <div className="mt-4 rounded-md border border-line bg-paper p-3 text-sm text-muted">
+            当前分析对象：{selectedResult.participant.department} · {selectedResult.participant.name} · {selectedResult.examTitle ?? '销售能力综合笔试 V3版'}
+          </div>
+        )}
         {error && <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       </section>
 
@@ -321,6 +364,91 @@ export default function AdminImportPage() {
         </table>
       </section>
 
+      {selectedResult && selectedAnalysis && (
+        <section className="panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-lg font-bold">员工个人分析</h3>
+              <p className="mt-2 text-sm text-muted">
+                {selectedResult.participant.department} · {selectedResult.participant.name} · {selectedResult.examTitle ?? '销售能力综合笔试 V3版'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-secondary" onClick={downloadTargetedExam}>下载针对性补考 JSON</button>
+              {isAuthed && (
+                <button className="btn-primary" disabled={isLoading} onClick={uploadTargetedExam}>
+                  {isLoading ? '上传中' : '生成并上传补考'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-6 lg:grid-cols-2">
+            <div>
+              <h4 className="font-semibold">诊断结论</h4>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
+                {selectedAnalysis.keyFindings.map((finding) => (
+                  <li key={finding}>{finding}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold">优势能力</h4>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedAnalysis.strengths.map((item) => (
+                  <span className="tag" key={item.dimension}>{item.dimension}：{item.percent}%</span>
+                ))}
+              </div>
+              <h4 className="mt-5 font-semibold">待补强能力</h4>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedAnalysis.weakDimensions.length ? selectedAnalysis.weakDimensions.map((item) => (
+                  <span className="tag" key={item.dimension}>{item.dimension}：{item.percent}%</span>
+                )) : <span className="tag">暂无明显短板</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div>
+              <h4 className="font-semibold">训练计划</h4>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
+                {selectedAnalysis.trainingPlan.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="overflow-x-auto">
+              <h4 className="font-semibold">重点复盘题</h4>
+              <table className="mt-3 w-full min-w-[520px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-paper text-left">
+                    <th className="border border-line p-2">题号</th>
+                    <th className="border border-line p-2">题目</th>
+                    <th className="border border-line p-2">得分</th>
+                    <th className="border border-line p-2">缺失点</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedAnalysis.lowScoreQuestions.map((question) => (
+                    <tr key={question.questionId}>
+                      <td className="border border-line p-2">{question.questionId}</td>
+                      <td className="border border-line p-2">{question.title}</td>
+                      <td className="border border-line p-2">{question.score}/{question.maxScore}</td>
+                      <td className="border border-line p-2">{question.missingPoints.join('、') || '无'}</td>
+                    </tr>
+                  ))}
+                  {!selectedAnalysis.lowScoreQuestions.length && (
+                    <tr>
+                      <td className="border border-line p-3 text-center text-muted" colSpan={4}>暂无明显低分题</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <div className="panel">
           <h3 className="text-lg font-bold">能力维度统计</h3>
@@ -341,7 +469,7 @@ export default function AdminImportPage() {
 
         <div className="panel overflow-x-auto">
           <h3 className="text-lg font-bold">成绩列表</h3>
-          <table className="mt-4 w-full min-w-[560px] border-collapse text-sm">
+          <table className="mt-4 w-full min-w-[680px] border-collapse text-sm">
             <thead>
               <tr className="bg-paper text-left">
                 <th className="border border-line p-2">考试</th>
@@ -350,6 +478,7 @@ export default function AdminImportPage() {
                 <th className="border border-line p-2">总分</th>
                 <th className="border border-line p-2">等级</th>
                 <th className="border border-line p-2">提交时间</th>
+                <th className="border border-line p-2">分析</th>
               </tr>
             </thead>
             <tbody>
@@ -361,11 +490,14 @@ export default function AdminImportPage() {
                   <td className="border border-line p-2">{result.totalScore}</td>
                   <td className="border border-line p-2">{result.grade}</td>
                   <td className="border border-line p-2">{new Date(result.submittedAt).toLocaleString()}</td>
+                  <td className="border border-line p-2">
+                    <button className="btn-secondary px-3 py-1" onClick={() => setSelectedResultId(result.id)}>查看</button>
+                  </td>
                 </tr>
               ))}
               {!results.length && (
                 <tr>
-                  <td className="border border-line p-3 text-center text-muted" colSpan={6}>暂无成绩数据</td>
+                  <td className="border border-line p-3 text-center text-muted" colSpan={7}>暂无成绩数据</td>
                 </tr>
               )}
             </tbody>
