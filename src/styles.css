@@ -46,4 +46,12 @@ select {
   .tag {
     @apply inline-flex items-center rounded-full border border-line bg-paper px-2.5 py-1 text-xs font-medium text-muted;
   }
+
+  .ai-badge {
+    @apply inline-flex items-center rounded-full border border-[#7c3aed] bg-[#f3e8ff] px-2.5 py-1 text-xs font-bold text-[#5b21b6];
+  }
+
+  .ai-panel {
+    @apply rounded-lg border border-[#a78bfa] bg-[#faf5ff] p-4;
+  }
 }

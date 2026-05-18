@@ -519,7 +519,9 @@ export default function AdminImportPage() {
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="tag">{aiAnalysisRecords[result.id] ? '已有 AI分析' : '未生成 AI分析'}</span>
+                  <span className={aiAnalysisRecords[result.id] ? 'ai-badge' : 'tag'}>
+                    {aiAnalysisRecords[result.id] ? 'AI分析已生成' : '未生成 AI分析'}
+                  </span>
                 </div>
               </article>
             );
@@ -567,33 +569,36 @@ export default function AdminImportPage() {
           </div>
 
           {selectedAiAnalysis && (
-            <div className="mt-6 rounded-lg border border-line bg-paper p-4">
+            <div className="ai-panel mt-6">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h4 className="font-semibold">AI分析 · 深度分析结果</h4>
-                <span className="tag">AI分析 · 更新时间：{selectedAiAnalysis.updated_at ? new Date(selectedAiAnalysis.updated_at).toLocaleString() : '刚刚'}</span>
+                <h4 className="font-semibold text-[#4c1d95]">AI分析 · 深度分析结果</h4>
+                <span className="ai-badge">AI分析 · 更新时间：{selectedAiAnalysis.updated_at ? new Date(selectedAiAnalysis.updated_at).toLocaleString() : '刚刚'}</span>
               </div>
               {stringifyAiValue(selectedAiAnalysis.analysis.summary) && (
                 <p className="mt-3 text-sm leading-6 text-muted">{stringifyAiValue(selectedAiAnalysis.analysis.summary)}</p>
               )}
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div>
-                  <h5 className="text-sm font-semibold">AI分析 · 识别优势</h5>
+                  <h5 className="text-sm font-semibold text-[#4c1d95]">AI分析 · 识别优势</h5>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
                     {toAiTextList(selectedAiAnalysis.analysis.strengths).map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
                 <div>
-                  <h5 className="text-sm font-semibold">AI分析 · 识别短板</h5>
+                  <h5 className="text-sm font-semibold text-[#4c1d95]">AI分析 · 识别短板</h5>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
                     {toAiTextList(selectedAiAnalysis.analysis.weaknesses).map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
               </div>
               <div className="mt-4">
-                <h5 className="text-sm font-semibold">AI分析 · 训练计划</h5>
+                <div className="flex items-center gap-2">
+                  <h5 className="text-sm font-semibold text-[#4c1d95]">AI分析 · 训练计划</h5>
+                  <span className="ai-badge">AI生成</span>
+                </div>
                 <div className="mt-2 grid gap-3 lg:grid-cols-2">
                   {toAiTrainingPlan(selectedAiAnalysis.analysis.trainingPlan).map((item, index) => (
-                    <div key={`${item.action}-${index}`} className="rounded-md border border-line bg-white p-3 text-sm">
+                    <div key={`${item.action}-${index}`} className="rounded-md border border-[#c4b5fd] bg-white p-3 text-sm">
                       <div className="font-semibold">{item.action || `训练动作 ${index + 1}`}</div>
                       <p className="mt-1 text-muted">{item.practice}</p>
                       <p className="mt-2 text-xs text-muted">达标标准：{item.successCriteria || '由管理者复核确认'}</p>

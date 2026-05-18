@@ -123,19 +123,27 @@ export default function EmployeeResultsPage() {
           </div>
 
           <div className="panel">
-            <h3 className="text-lg font-bold">系统训练建议</h3>
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
-              {buildTrainingPlan(selectedResult).map((item) => <li key={item}>{item}</li>)}
-            </ul>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-bold">系统训练计划</h3>
+              <span className="tag">规则评分生成</span>
+            </div>
+            <div className="mt-3 space-y-3">
+              {buildTrainingPlan(selectedResult).map((item, index) => (
+                <div key={item} className="rounded-md border border-line bg-paper p-3 text-sm">
+                  <div className="text-xs font-semibold text-focus">训练 {index + 1}</div>
+                  <p className="mt-1 text-muted">{item}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
 
       {selectedAi && (
-        <section className="panel">
+        <section className="ai-panel">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-lg font-bold">AI分析结果</h3>
-            <span className="tag">AI分析 · {selectedAi.updated_at ? new Date(selectedAi.updated_at).toLocaleString() : '已生成'}</span>
+            <h3 className="text-lg font-bold text-[#4c1d95]">AI分析结果</h3>
+            <span className="ai-badge">AI分析 · {selectedAi.updated_at ? new Date(selectedAi.updated_at).toLocaleString() : '已生成'}</span>
           </div>
           {stringifyAiValue(selectedAi.analysis.summary) && <p className="mt-3 text-sm leading-6 text-muted">{stringifyAiValue(selectedAi.analysis.summary)}</p>}
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -153,10 +161,13 @@ export default function EmployeeResultsPage() {
             </div>
           </div>
           <div className="mt-5">
-            <h4 className="font-semibold">AI训练计划</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold text-[#4c1d95]">AI训练计划</h4>
+              <span className="ai-badge">AI生成</span>
+            </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               {toAiTrainingPlan(selectedAi.analysis.trainingPlan).map((item, index) => (
-                <div key={`${item.action}-${index}`} className="rounded-md border border-line bg-paper p-3 text-sm">
+                <div key={`${item.action}-${index}`} className="rounded-md border border-[#c4b5fd] bg-white p-3 text-sm">
                   <div className="font-semibold">{item.action || `训练动作 ${index + 1}`}</div>
                   <p className="mt-1 text-muted">{item.practice}</p>
                   <p className="mt-2 text-xs text-muted">达标标准：{item.successCriteria || '由管理者复核确认'}</p>
