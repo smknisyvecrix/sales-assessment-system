@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { calculateDimensionAverage, calculateLevelDistribution, exportResultsToCsv, parseAssessmentFiles } from '../lib/csv';
 import { downloadText } from '../lib/export';
 import type { AssessmentResult } from '../lib/scoring';
-import { fetchCloudResults, supabase } from '../lib/supabase';
+import {
+  fetchAiAnalysisRecords,
+  fetchCloudResults,
+  invokeAiAnalysis,
+  saveAiAnalysisRecord,
+  supabase,
+  type AiAnalysisRecord,
+} from '../lib/supabase';
 import { defaultExamSet, fetchExamSets, normalizeUploadedExam, uploadExamSet, type ExamSet } from '../lib/examSets';
 import { buildEmployeeAnalysis, buildTargetedExamForResult } from '../lib/employeeAnalysis';
 
@@ -49,7 +56,9 @@ export default function AdminImportPage() {
   const [password, setPassword] = useState('');
   const [isAuthed, setIsAuthed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAiRunning, setIsAiRunning] = useState(false);
   const [status, setStatus] = useState('未登录。登录后可读取云端全部员工提交结果。');
+  const [aiAnalysisRecords, setAiAnalysisRecords] = useState<Record<string, AiAnalysisRecord>>({});
 
   const filteredResults = useMemo(
     () => selectedExamId === 'all' ? results : results.filter((result) => getExamKey(result) === selectedExamId),
@@ -67,6 +76,7 @@ export default function AdminImportPage() {
     () => selectedResult ? buildEmployeeAnalysis(selectedResult) : null,
     [selectedResult],
   );
+  const selectedAiAnalysis = selectedResult ? aiAnalysisRecords[selectedResult.id] : undefined;
   const employeeAnalyses = useMemo(
     () => filteredResults.map((result) => ({
       result,
@@ -83,12 +93,22 @@ export default function AdminImportPage() {
     setExamSets(exams);
   };
 
+  const loadAiAnalysisRecords = async () => {
+    try {
+      const records = await fetchAiAnalysisRecords();
+      setAiAnalysisRecords(Object.fromEntries(records.map((record) => [record.result_id, record])));
+    } catch {
+      setStatus('已读取成绩，但 AI 分析表暂不可用。请确认已运行 supabase-ai-analysis.sql。');
+    }
+  };
+
   const loadCloudResults = async () => {
     setIsLoading(true);
     setError('');
     try {
       const cloudResults = await fetchCloudResults();
       setResults((current) => mergeResults(current, cloudResults));
+      await loadAiAnalysisRecords();
       setStatus(`已从云端读取 ${cloudResults.length} 份提交结果。`);
     } catch {
       setError('读取云端结果失败：请确认当前账号已加入 admin_users，并且 Supabase RLS 策略已成功创建。');
@@ -139,6 +159,13 @@ export default function AdminImportPage() {
 
   const buildTargetedExam = () => {
     if (!selectedResult) return null;
+    if (selectedAiAnalysis?.targeted_exam) {
+      return {
+        ...selectedAiAnalysis.targeted_exam,
+        id: selectedAiAnalysis.targeted_exam.id || `ai-target-${selectedResult.id}`,
+        isActive: true,
+      };
+    }
     return buildTargetedExamForResult(selectedResult, examSets);
   };
 
@@ -162,6 +189,52 @@ export default function AdminImportPage() {
       setError('上传针对性补考失败：请确认 exam_sets 表和管理员权限已配置。');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const runAiAnalysisForResult = async (result: AssessmentResult) => {
+    const localAnalysis = buildEmployeeAnalysis(result);
+    const aiData = await invokeAiAnalysis(result, localAnalysis);
+    await saveAiAnalysisRecord(result, aiData);
+    await loadAiAnalysisRecords();
+    return aiData;
+  };
+
+  const runSelectedAiAnalysis = async () => {
+    if (!selectedResult) return;
+    setIsAiRunning(true);
+    setError('');
+
+    try {
+      await runAiAnalysisForResult(selectedResult);
+      setStatus(`已生成 AI 分析：${selectedResult.participant.name}`);
+    } catch {
+      setError('AI 分析失败：请确认 Edge Function 已部署，UNITRUST_API_KEY 已配置，并且当前账号是管理员。');
+    } finally {
+      setIsAiRunning(false);
+    }
+  };
+
+  const runMissingAiAnalysisForAll = async () => {
+    const pending = filteredResults.filter((result) => !aiAnalysisRecords[result.id]);
+    if (!pending.length) {
+      setStatus('当前统计范围内所有员工都已有 AI 分析。');
+      return;
+    }
+
+    setIsAiRunning(true);
+    setError('');
+
+    try {
+      for (const result of pending) {
+        setStatus(`正在生成 AI 分析：${result.participant.name}`);
+        await runAiAnalysisForResult(result);
+      }
+      setStatus(`已补齐 ${pending.length} 个员工的 AI 分析。`);
+    } catch {
+      setError('批量 AI 分析中断：请稍后重试，已完成的分析会保留。');
+    } finally {
+      setIsAiRunning(false);
     }
   };
 
@@ -234,6 +307,9 @@ export default function AdminImportPage() {
               <>
                 <button className="btn-secondary" disabled={isLoading} onClick={loadCloudResults}>
                   {isLoading ? '读取中' : '刷新云端结果'}
+                </button>
+                <button className="btn-secondary" disabled={isAiRunning || !filteredResults.length} onClick={runMissingAiAnalysisForAll}>
+                  {isAiRunning ? 'AI分析中' : '补齐全员AI分析'}
                 </button>
                 <button className="btn-secondary" onClick={signOut}>退出登录</button>
               </>
@@ -441,6 +517,9 @@ export default function AdminImportPage() {
                     </div>
                   </div>
                 </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="tag">{aiAnalysisRecords[result.id] ? '已有 AI 分析' : '未生成 AI 分析'}</span>
+                </div>
               </article>
             );
           })}
@@ -474,6 +553,9 @@ export default function AdminImportPage() {
               </label>
             </div>
             <div className="flex flex-wrap gap-2">
+              <button className="btn-secondary" disabled={isAiRunning} onClick={runSelectedAiAnalysis}>
+                {isAiRunning ? 'AI分析中' : selectedAiAnalysis ? '重新生成AI分析' : '生成AI深度分析'}
+              </button>
               <button className="btn-secondary" onClick={downloadTargetedExam}>下载针对性补考 JSON</button>
               {isAuthed && (
                 <button className="btn-primary" disabled={isLoading} onClick={uploadTargetedExam}>
@@ -482,6 +564,52 @@ export default function AdminImportPage() {
               )}
             </div>
           </div>
+
+          {selectedAiAnalysis && (
+            <div className="mt-6 rounded-lg border border-line bg-paper p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h4 className="font-semibold">AI 深度分析</h4>
+                <span className="tag">更新时间：{selectedAiAnalysis.updated_at ? new Date(selectedAiAnalysis.updated_at).toLocaleString() : '刚刚'}</span>
+              </div>
+              {selectedAiAnalysis.analysis.summary && (
+                <p className="mt-3 text-sm leading-6 text-muted">{selectedAiAnalysis.analysis.summary}</p>
+              )}
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <h5 className="text-sm font-semibold">AI 识别优势</h5>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+                    {(selectedAiAnalysis.analysis.strengths ?? []).map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="text-sm font-semibold">AI 识别短板</h5>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+                    {(selectedAiAnalysis.analysis.weaknesses ?? []).map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <div className="mt-4">
+                <h5 className="text-sm font-semibold">AI 训练计划</h5>
+                <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                  {(selectedAiAnalysis.analysis.trainingPlan ?? []).map((item, index) => (
+                    <div key={`${item.action}-${index}`} className="rounded-md border border-line bg-white p-3 text-sm">
+                      <div className="font-semibold">{item.action || `训练动作 ${index + 1}`}</div>
+                      <p className="mt-1 text-muted">{item.practice}</p>
+                      <p className="mt-2 text-xs text-muted">达标标准：{item.successCriteria || '由管理者复核确认'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {(selectedAiAnalysis.analysis.managerCoachingNotes ?? []).length > 0 && (
+                <div className="mt-4">
+                  <h5 className="text-sm font-semibold">管理者辅导要点</h5>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+                    {(selectedAiAnalysis.analysis.managerCoachingNotes ?? []).map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-5 grid gap-6 lg:grid-cols-2">
             <div>

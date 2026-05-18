@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { AssessmentResult } from './scoring';
+import type { EmployeeAnalysis } from './employeeAnalysis';
+import type { ExamSet } from './examSets';
 
 const supabaseUrl = 'https://vprgpxjsjosvreoiysor.supabase.co';
 const supabasePublishableKey = 'sb_publishable_YO6Kk7994LxE1zd25b9Q-w_6Ib56MOI';
@@ -15,6 +17,29 @@ interface AssessmentResultRow {
   grade: string;
   submitted_at: string;
   result: AssessmentResult;
+}
+
+export interface AiAnalysisRecord {
+  result_id: string;
+  participant_name: string;
+  department: string;
+  exam_id: string;
+  exam_title: string;
+  analysis: {
+    summary?: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    rootCauses?: string[];
+    trainingPlan?: Array<{
+      action?: string;
+      practice?: string;
+      successCriteria?: string;
+    }>;
+    managerCoachingNotes?: string[];
+    [key: string]: unknown;
+  };
+  targeted_exam?: ExamSet | null;
+  updated_at?: string;
 }
 
 export const saveResultToCloud = async (result: AssessmentResult) => {
@@ -57,4 +82,61 @@ export const fetchCloudResults = async () => {
     maxScore: row.result.maxScore ?? row.max_score,
     grade: row.result.grade ?? (row.grade as AssessmentResult['grade']),
   }));
+};
+
+export const fetchAiAnalysisRecords = async () => {
+  const { data, error } = await supabase
+    .from('ai_analysis_results')
+    .select('result_id, participant_name, department, exam_id, exam_title, analysis, targeted_exam, updated_at')
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as AiAnalysisRecord[];
+};
+
+export const invokeAiAnalysis = async (result: AssessmentResult, localAnalysis: EmployeeAnalysis) => {
+  const { data, error } = await supabase.functions.invoke('ai-analysis', {
+    body: {
+      result,
+      localAnalysis,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as {
+    analysis: AiAnalysisRecord['analysis'];
+    targetedExam?: ExamSet;
+    targeted_exam?: ExamSet;
+  };
+};
+
+export const saveAiAnalysisRecord = async (
+  result: AssessmentResult,
+  aiData: {
+    analysis: AiAnalysisRecord['analysis'];
+    targetedExam?: ExamSet;
+    targeted_exam?: ExamSet;
+  },
+) => {
+  const targetedExam = aiData.targetedExam ?? aiData.targeted_exam ?? null;
+  const { error } = await supabase.from('ai_analysis_results').upsert({
+    result_id: result.id,
+    participant_name: result.participant.name,
+    department: result.participant.department,
+    exam_id: result.examId ?? 'sales-v3',
+    exam_title: result.examTitle ?? '销售能力综合笔试 V3版',
+    analysis: aiData.analysis,
+    targeted_exam: targetedExam,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw error;
+  }
 };

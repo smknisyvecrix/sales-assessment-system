@@ -17,6 +17,7 @@
 - 管理端支持按单次考试统计，也支持全部考试总体统计
 - 管理端支持点击员工成绩查看个人分析、训练计划和重点复盘题
 - 管理端可基于员工弱项生成针对性补考试卷，并上传为新的可选考试
+- 管理端可通过 Supabase Edge Function 调用公司 AI API，生成 AI 深度分析和 AI 针对性补考建议
 - 管理端仍支持导入多个员工 JSON，统计成绩列表、能力维度均分、等级分布、最弱能力维度
 - 管理端支持导出 CSV
 - 使用 hash 路由，兼容 GitHub Pages
@@ -137,6 +138,33 @@ GitHub 会自动重新部署。
 5. 点 `Run`。
 
 注意：这段 SQL 依赖之前已经创建好的 `public.is_admin()` 函数和 `admin_users` 表。
+
+## Supabase AI 分析
+
+如果要启用 AI 深度分析，需要完成三件事：
+
+1. 在 Supabase SQL Editor 运行 `supabase-ai-analysis.sql`。
+2. 部署 Edge Function：`supabase/functions/ai-analysis`。
+3. 在 Supabase Edge Function Secrets 中设置：
+
+```text
+UNITRUST_API_KEY=你的公司AI密钥
+UNITRUST_API_URL=https://ai.unitrust.com.cn/v1/chat/completions
+UNITRUST_MODEL=kimi-k2.6
+```
+
+密钥只放在 Supabase Secret 中，不能写进前端代码，也不要提交到 GitHub。
+
+部署函数可以使用 Supabase CLI：
+
+```bash
+supabase login
+supabase link --project-ref vprgpxjsjosvreoiysor
+supabase secrets set UNITRUST_API_KEY=你的公司AI密钥
+supabase secrets set UNITRUST_API_URL=https://ai.unitrust.com.cn/v1/chat/completions
+supabase secrets set UNITRUST_MODEL=kimi-k2.6
+supabase functions deploy ai-analysis
+```
 
 ## 评分规则
 
