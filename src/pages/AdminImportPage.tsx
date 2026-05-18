@@ -213,6 +213,13 @@ export default function AdminImportPage() {
     downloadText('销售测评成绩汇总.csv', `\uFEFF${exportResultsToCsv(filteredResults)}`, 'text/csv');
   };
 
+  const selectResultForAnalysis = (resultId: string) => {
+    setSelectedResultId(resultId);
+    window.setTimeout(() => {
+      document.getElementById('employee-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
   return (
     <div className="space-y-6">
       <section className="panel">
@@ -371,57 +378,100 @@ export default function AdminImportPage() {
         </table>
       </section>
 
-      <section className="panel overflow-x-auto">
+      <section className="panel">
         <h3 className="text-lg font-bold">全员个人分析概览</h3>
-        <table className="mt-4 w-full min-w-[920px] border-collapse text-sm">
-          <thead>
-            <tr className="bg-paper text-left">
-              <th className="border border-line p-2">员工</th>
-              <th className="border border-line p-2">考试</th>
-              <th className="border border-line p-2">总分/等级</th>
-              <th className="border border-line p-2">待补强能力</th>
-              <th className="border border-line p-2">训练重点</th>
-              <th className="border border-line p-2">低分题</th>
-              <th className="border border-line p-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {employeeAnalyses.map(({ result, analysis }) => (
-              <tr key={result.id}>
-                <td className="border border-line p-2">{result.participant.department} · {result.participant.name}</td>
-                <td className="border border-line p-2">{result.examTitle ?? '销售能力综合笔试 V3版'}</td>
-                <td className="border border-line p-2">{result.totalScore}/{result.maxScore} · {result.grade}</td>
-                <td className="border border-line p-2">
-                  {analysis.weakDimensions.length
-                    ? analysis.weakDimensions.map((item) => `${item.dimension}${item.percent}%`).join('、')
-                    : '暂无明显短板'}
-                </td>
-                <td className="border border-line p-2">
-                  {analysis.trainingPlan.slice(0, 2).join('；')}
-                </td>
-                <td className="border border-line p-2">{analysis.lowScoreQuestions.length}</td>
-                <td className="border border-line p-2">
-                  <button className="btn-secondary px-3 py-1" onClick={() => setSelectedResultId(result.id)}>查看详情</button>
-                </td>
-              </tr>
-            ))}
-            {!employeeAnalyses.length && (
-              <tr>
-                <td className="border border-line p-3 text-center text-muted" colSpan={7}>暂无员工分析数据</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {employeeAnalyses.map(({ result, analysis }) => {
+            const scorePercent = Math.round((result.totalScore / Math.max(result.maxScore, 1)) * 100);
+            const chartDimensions = analysis.weakDimensions.length
+              ? analysis.weakDimensions
+              : Object.entries(result.dimensionScores)
+                  .map(([dimension, bucket]) => ({
+                    dimension,
+                    percent: bucket.percent,
+                    score: bucket.score,
+                    maxScore: bucket.maxScore,
+                  }))
+                  .sort((left, right) => left.percent - right.percent)
+                  .slice(0, 3);
+
+            return (
+              <article key={result.id} className="rounded-lg border border-line bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h4 className="font-semibold">{result.participant.department} · {result.participant.name}</h4>
+                    <p className="mt-1 text-xs text-muted">{result.examTitle ?? '销售能力综合笔试 V3版'}</p>
+                  </div>
+                  <button className="btn-secondary px-3 py-1" onClick={() => selectResultForAnalysis(result.id)}>查看详情</button>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>总分</span>
+                    <span>{result.totalScore}/{result.maxScore} · {result.grade}</span>
+                  </div>
+                  <div className="mt-1 h-2 rounded-full bg-paper">
+                    <div className="h-2 rounded-full bg-focus" style={{ width: `${scorePercent}%` }} />
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {chartDimensions.map((item) => (
+                    <div key={item.dimension}>
+                      <div className="flex justify-between text-xs text-muted">
+                        <span>{item.dimension}</span>
+                        <span>{item.percent}%</span>
+                      </div>
+                      <div className="mt-1 h-2 rounded-full bg-paper">
+                        <div className="h-2 rounded-full bg-accent" style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-line bg-paper p-3">
+                    <div className="text-xs text-muted">低分题数量</div>
+                    <div className="mt-1 text-xl font-bold text-accent">{analysis.lowScoreQuestions.length}</div>
+                  </div>
+                  <div className="rounded-md border border-line bg-paper p-3">
+                    <div className="text-xs text-muted">训练重点</div>
+                    <div className="mt-1 text-sm font-semibold text-ink">
+                      {analysis.weakDimensions[0]?.dimension ?? chartDimensions[0]?.dimension ?? '综合能力'}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        {!employeeAnalyses.length && (
+          <p className="mt-4 rounded-md border border-line bg-paper p-4 text-center text-sm text-muted">暂无员工分析数据</p>
+        )}
       </section>
 
       {selectedResult && selectedAnalysis && (
-        <section className="panel">
+        <section id="employee-detail" className="panel scroll-mt-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h3 className="text-lg font-bold">员工个人分析</h3>
               <p className="mt-2 text-sm text-muted">
                 {selectedResult.participant.department} · {selectedResult.participant.name} · {selectedResult.examTitle ?? '销售能力综合笔试 V3版'}
               </p>
+              <label className="mt-4 block max-w-xl text-sm font-medium text-ink">
+                选择员工
+                <select
+                  className="field mt-1"
+                  value={selectedResult.id}
+                  onChange={(event) => setSelectedResultId(event.target.value)}
+                >
+                  {filteredResults.map((result) => (
+                    <option key={result.id} value={result.id}>
+                      {result.participant.department} · {result.participant.name} · {result.examTitle ?? '销售能力综合笔试 V3版'}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="btn-secondary" onClick={downloadTargetedExam}>下载针对性补考 JSON</button>
@@ -541,7 +591,7 @@ export default function AdminImportPage() {
                   <td className="border border-line p-2">{result.grade}</td>
                   <td className="border border-line p-2">{new Date(result.submittedAt).toLocaleString()}</td>
                   <td className="border border-line p-2">
-                    <button className="btn-secondary px-3 py-1" onClick={() => setSelectedResultId(result.id)}>查看</button>
+                    <button className="btn-secondary px-3 py-1" onClick={() => selectResultForAnalysis(result.id)}>查看</button>
                   </td>
                 </tr>
               ))}
