@@ -577,6 +577,52 @@ export default function AdminImportPage() {
               {stringifyAiValue(selectedAiAnalysis.analysis.summary) && (
                 <p className="mt-3 text-sm leading-6 text-muted">{stringifyAiValue(selectedAiAnalysis.analysis.summary)}</p>
               )}
+              {selectedAiAnalysis.analysis.rescoring && (
+                <div className="mt-5 rounded-lg border border-[#c4b5fd] bg-white p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h5 className="text-sm font-semibold text-[#4c1d95]">AI分析 · 重新评分</h5>
+                      <p className="mt-1 text-xs text-muted">AI 基于员工答案内容、题目要求和原始评分点重新理解后给出的复评分。</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="ai-badge">原始：{selectedResult.totalScore}/{selectedResult.maxScore} · {selectedResult.grade}</span>
+                      <span className="ai-badge">
+                        AI复评：{selectedAiAnalysis.analysis.rescoring.totalScore ?? '-'}
+                        /{selectedAiAnalysis.analysis.rescoring.maxScore ?? selectedResult.maxScore}
+                        {' · '}
+                        {selectedAiAnalysis.analysis.rescoring.grade ?? '-'}
+                      </span>
+                    </div>
+                  </div>
+                  {stringifyAiValue(selectedAiAnalysis.analysis.rescoring.summary) && (
+                    <p className="mt-3 text-sm leading-6 text-muted">{stringifyAiValue(selectedAiAnalysis.analysis.rescoring.summary)}</p>
+                  )}
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full min-w-[760px] border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-paper text-left">
+                          <th className="border border-line p-2">题号</th>
+                          <th className="border border-line p-2">题目</th>
+                          <th className="border border-line p-2">原始分</th>
+                          <th className="border border-line p-2">AI复评分</th>
+                          <th className="border border-line p-2">AI复评理由</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedAiAnalysis.analysis.rescoring.questionScores ?? []).map((question, index) => (
+                          <tr key={`${question.questionId}-${index}`}>
+                            <td className="border border-line p-2">{question.questionId}</td>
+                            <td className="border border-line p-2">{question.title}</td>
+                            <td className="border border-line p-2">{question.originalScore}/{question.maxScore}</td>
+                            <td className="border border-line p-2 font-semibold text-[#5b21b6]">{question.aiScore}/{question.maxScore}</td>
+                            <td className="border border-line p-2">{question.reason || question.evidence || question.manualReviewSuggestion}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div>
                   <h5 className="text-sm font-semibold text-[#4c1d95]">AI分析 · 识别优势</h5>

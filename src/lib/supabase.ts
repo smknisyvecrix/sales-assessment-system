@@ -35,6 +35,22 @@ export interface AiAnalysisRecord {
       practice?: string;
       successCriteria?: string;
     }>;
+    rescoring?: {
+      totalScore?: number;
+      maxScore?: number;
+      grade?: string;
+      summary?: string;
+      questionScores?: Array<{
+        questionId?: string;
+        title?: string;
+        originalScore?: number;
+        aiScore?: number;
+        maxScore?: number;
+        reason?: string;
+        evidence?: string;
+        manualReviewSuggestion?: string;
+      }>;
+    };
     managerCoachingNotes?: string[];
     [key: string]: unknown;
   };
